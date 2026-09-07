@@ -1,0 +1,29 @@
+{
+	"name": "devcontainer-patcher",
+	//"use_podman": true,
+	//"podman_path": "podman",
+	"image": "mcr.microsoft.com/devcontainers/base:bookworm",
+	"features": {
+		"ghcr.io/devcontainers/features/go:1": {
+			"version": "1.27"
+		},
+		"ghcr.io/devcontainers/features/common-utils:2": {
+			"installZsh": true,
+			"configureZshAsDefaultShell": true
+		},
+		"ghcr.io/clamoriniere/devcontainer-features/claude-code:1": {}
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"golang.go",
+				"eamodio.gitlens"
+			],
+			"settings": {
+				"go.toolsManagement.autoUpdate": true,
+				"go.useLanguageServer": true
+			}
+		}
+	},
+	"remoteUser": "vscode"
+}

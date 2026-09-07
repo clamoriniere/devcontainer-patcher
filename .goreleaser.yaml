@@ -1,0 +1,102 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: devcontainer-patcher
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod download
+
+builds:
+  - id: dcp
+    binary: dcp
+    main: .
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/clamoriniere/devcontainer-patcher/cmd.version={{ .Version }}
+      - -X github.com/clamoriniere/devcontainer-patcher/cmd.commit={{ .Commit }}
+      - -X github.com/clamoriniere/devcontainer-patcher/cmd.date={{ .CommitDate }}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: dcp
+    ids:
+      - dcp
+    name_template: >-
+      dcp_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - LICENSE
+      - docs/*
+
+checksum:
+  name_template: "checksums.txt"
+
+sboms:
+  - artifacts: archive
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: clamoriniere
+    name: devcontainer-patcher
+  draft: false
+  prerelease: auto
+  name_template: "v{{ .Version }}"
+
+# Homebrew tap — enable once the tap repo exists.
+# brews:
+#   - name: dcp
+#     repository:
+#       owner: clamoriniere
+#       name: homebrew-tap
+#     homepage: "https://github.com/clamoriniere/devcontainer-patcher"
+#     description: "Layer personal dev container overrides on top of a repo's devcontainer.json"
+#     license: "MIT"
+#     install: |
+#       bin.install "dcp"
