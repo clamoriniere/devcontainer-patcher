@@ -31,7 +31,8 @@ format, so you can copy fragments straight out of any real config:
     "ghcr.io/meaningful-ooo/devcontainer-features/fish:1": {}
   },
   "mounts": [
-    "source=${localEnv:HOME}/.zsh_history,target=/home/vscode/.zsh_history,type=bind"
+    // ${dcp:remoteUser} is filled in from the merged config (see Placeholders).
+    "source=${localEnv:HOME}/.zsh_history,target=/home/${dcp:remoteUser}/.zsh_history,type=bind"
   ],
   "customizations": {
     "vscode": { "extensions": ["vscodevim.vim"] }
@@ -118,6 +119,51 @@ convention:
 ```jsonc
 { "postStartCommand": null }
 ```
+
+### Placeholders
+
+The dev container spec's own variables (`${localWorkspaceFolder}`,
+`${localEnv:HOME}`, `${containerWorkspaceFolder}`, `${devcontainerId}`, …) work
+in every layer — `dcp` never touches `${...}`, it stays for the devcontainer CLI
+to resolve. What the spec has **no** variable for is the config's own resolved
+`remoteUser` / `containerUser`. `dcp` fills that gap with `${dcp:name}`.
+
+```jsonc
+{
+  "mounts": [
+    // spec's ${localEnv:HOME} + dcp's ${dcp:remoteUser}, side by side
+    "source=${localEnv:HOME}/.claude,target=/home/${dcp:remoteUser}/.claude,type=bind"
+  ]
+}
+```
+
+`${dcp:...}` placeholders are resolved **after** the merge — so a value set by
+one layer can be referenced from another — and every one is removed before the
+config is written or handed to the devcontainer CLI. Use `${dcp:name:fallback}`
+for a literal fallback (the spec's own `${localEnv:VAR:default}` shape). An
+unresolved placeholder with no fallback is an error naming it and where it
+appears.
+
+Built-in names (matched case-insensitively):
+
+| Name | Value |
+| --- | --- |
+| `remoteUser` | the merged `remoteUser` (error if no layer sets it and there is no fallback) |
+| `containerUser` | the merged `containerUser` |
+
+Define your own with `$vars` in any overlay — later layers override earlier
+keys, and a `$vars` entry shadows a built-in of the same name:
+
+```jsonc
+{
+  "$vars": { "claudeCache": "${localWorkspaceFolder}/.cache/claude" },
+  "mounts": ["source=${dcp:claudeCache},target=/home/${dcp:remoteUser}/.cache/claude,type=bind"]
+}
+```
+
+Resolution is a single pass: a value that itself resolves to another
+`${dcp:...}` is left as written. Like `$strategy`, the `$vars` key is stripped
+before the config is written.
 
 ### A note on lifecycle commands
 

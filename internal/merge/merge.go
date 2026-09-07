@@ -11,6 +11,7 @@ package merge
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -20,6 +21,14 @@ import (
 // directiveStrategy is the key an overlay uses to override the default rule for
 // a given dotted path, e.g. {"$strategy": {"postCreateCommand": "replace"}}.
 const directiveStrategy = "$strategy"
+
+// directiveVars is the key an overlay uses to define custom %%name%%
+// placeholders, e.g. {"$vars": {"cacheDir": "%%localWorkspaceFolder%%/.cache"}}.
+// The placeholders themselves are expanded after the merge, in package subst.
+const directiveVars = "$vars"
+
+// varNameRE is the identifier shape allowed for a $vars key.
+var varNameRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // Layer is one input document in the merge.
 type Layer struct {
@@ -36,6 +45,9 @@ type Result struct {
 	Provenance map[string][]string
 	Warnings   []string
 	Layers     []Layer
+	// Vars collects the $vars directives from every layer, later layers
+	// overriding earlier ones. Keys are kept as written; consumers lowercase.
+	Vars map[string]string
 }
 
 // Merge folds layers left to right. The first layer is the base (normally the
@@ -45,15 +57,19 @@ func Merge(layers []Layer) (*Result, error) {
 		Config:     map[string]any{},
 		Provenance: map[string][]string{},
 		Layers:     layers,
+		Vars:       map[string]string{},
 	}
 
 	for _, layer := range layers {
 		if layer.Data == nil {
 			continue
 		}
-		strategies, data, err := extractDirectives(layer.Data)
+		strategies, vars, data, err := extractDirectives(layer.Data)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", layer.Name, err)
+		}
+		for k, v := range vars {
+			res.Vars[k] = v
 		}
 		m := &merger{res: res, layer: layer.Name, strategies: strategies}
 		merged := m.mergeObject("", res.Config, data)
@@ -65,8 +81,9 @@ func Merge(layers []Layer) (*Result, error) {
 
 // extractDirectives splits $-prefixed control keys out of an overlay so they
 // never reach the generated config.
-func extractDirectives(doc map[string]any) (map[string]Rule, map[string]any, error) {
+func extractDirectives(doc map[string]any) (map[string]Rule, map[string]string, map[string]any, error) {
 	strategies := map[string]Rule{}
+	vars := map[string]string{}
 	out := make(map[string]any, len(doc))
 
 	for k, v := range doc {
@@ -74,27 +91,43 @@ func extractDirectives(doc map[string]any) (map[string]Rule, map[string]any, err
 			out[k] = v
 			continue
 		}
-		if k != directiveStrategy {
-			// $schema and friends are metadata; ignore rather than fail.
-			continue
-		}
-		raw, ok := v.(map[string]any)
-		if !ok {
-			return nil, nil, fmt.Errorf("%s must be an object of path -> strategy", directiveStrategy)
-		}
-		for path, s := range raw {
-			name, ok := s.(string)
+		switch k {
+		case directiveStrategy:
+			raw, ok := v.(map[string]any)
 			if !ok {
-				return nil, nil, fmt.Errorf("%s[%q] must be a string", directiveStrategy, path)
+				return nil, nil, nil, fmt.Errorf("%s must be an object of path -> strategy", directiveStrategy)
 			}
-			rule, err := parseRule(name)
-			if err != nil {
-				return nil, nil, fmt.Errorf("%s[%q]: %w", directiveStrategy, path, err)
+			for path, s := range raw {
+				name, ok := s.(string)
+				if !ok {
+					return nil, nil, nil, fmt.Errorf("%s[%q] must be a string", directiveStrategy, path)
+				}
+				rule, err := parseRule(name)
+				if err != nil {
+					return nil, nil, nil, fmt.Errorf("%s[%q]: %w", directiveStrategy, path, err)
+				}
+				strategies[path] = rule
 			}
-			strategies[path] = rule
+		case directiveVars:
+			raw, ok := v.(map[string]any)
+			if !ok {
+				return nil, nil, nil, fmt.Errorf("%s must be an object of name -> string", directiveVars)
+			}
+			for name, s := range raw {
+				if !varNameRE.MatchString(name) {
+					return nil, nil, nil, fmt.Errorf("%s[%q]: name must match %s", directiveVars, name, varNameRE)
+				}
+				str, ok := s.(string)
+				if !ok {
+					return nil, nil, nil, fmt.Errorf("%s[%q] must be a string", directiveVars, name)
+				}
+				vars[name] = str
+			}
+		default:
+			// $schema and friends are metadata; ignore rather than fail.
 		}
 	}
-	return strategies, out, nil
+	return strategies, vars, out, nil
 }
 
 func parseRule(name string) (Rule, error) {

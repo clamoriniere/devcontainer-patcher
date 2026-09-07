@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/clamoriniere/devcontainer-patcher/internal/install"
 	"github.com/clamoriniere/devcontainer-patcher/internal/jsonx"
 	"github.com/clamoriniere/devcontainer-patcher/internal/layers"
 	"github.com/clamoriniere/devcontainer-patcher/internal/merge"
 	"github.com/clamoriniere/devcontainer-patcher/internal/runner"
+	"github.com/clamoriniere/devcontainer-patcher/internal/subst"
 )
 
 // exitError carries a child process's exit code up to Execute.
@@ -98,6 +100,10 @@ func resolve() (*resolution, error) {
 		return nil, err
 	}
 
+	if err := expandPlaceholders(result); err != nil {
+		return nil, err
+	}
+
 	return &resolution{
 		Workspace: ws,
 		Installer: inst,
@@ -105,6 +111,25 @@ func resolve() (*resolution, error) {
 		Set:       set,
 		Result:    result,
 	}, nil
+}
+
+// expandPlaceholders rewrites ${dcp:name} tokens in the merged config, in
+// place. The built-in names are remoteUser and containerUser, taken from the
+// merged config (the spec has no variable for either); $vars directives from
+// any overlay layer add to and override them. Workspace-folder interpolation
+// is left to the spec's own ${localWorkspaceFolder} / ...Basename.
+func expandPlaceholders(result *merge.Result) error {
+	vars := subst.Vars{}
+	if s, ok := result.Config["remoteUser"].(string); ok {
+		vars["remoteuser"] = s
+	}
+	if s, ok := result.Config["containerUser"].(string); ok {
+		vars["containeruser"] = s
+	}
+	for k, v := range result.Vars {
+		vars[strings.ToLower(k)] = v
+	}
+	return subst.Expand(result.Config, vars)
 }
 
 // printWarnings surfaces merge warnings on stderr so stdout stays pipeable.

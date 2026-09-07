@@ -263,3 +263,52 @@ func TestUnknownStrategyIsAnError(t *testing.T) {
 		t.Fatal("expected an error for an unknown strategy")
 	}
 }
+
+func TestVarsDirectiveCollectedAndStripped(t *testing.T) {
+	res := mergeDocs(t,
+		`{"name": "proj"}`,
+		`{"$vars": {"cacheDir": "/tmp/x", "user": "vscode"}, "remoteUser": "vscode"}`)
+
+	if got := res.Vars["cacheDir"]; got != "/tmp/x" {
+		t.Errorf("Vars[cacheDir] = %q, want /tmp/x", got)
+	}
+	if got := res.Vars["user"]; got != "vscode" {
+		t.Errorf("Vars[user] = %q, want vscode", got)
+	}
+	if _, leaked := res.Config["$vars"]; leaked {
+		t.Error("$vars leaked into the generated config")
+	}
+}
+
+func TestVarsDirectiveLaterLayerWins(t *testing.T) {
+	res := mergeDocs(t,
+		`{"$vars": {"env": "base", "keep": "yes"}}`,
+		`{"$vars": {"env": "override"}}`)
+
+	if got := res.Vars["env"]; got != "override" {
+		t.Errorf("Vars[env] = %q, want override", got)
+	}
+	if got := res.Vars["keep"]; got != "yes" {
+		t.Errorf("Vars[keep] = %q, want yes", got)
+	}
+}
+
+func TestVarsDirectiveNonStringIsError(t *testing.T) {
+	doc, err := jsonx.Parse([]byte(`{"$vars": {"n": 3}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Merge([]Layer{{Name: "repo", Data: map[string]any{}}, {Name: "user", Data: doc}}); err == nil {
+		t.Fatal("expected an error for a non-string $vars value")
+	}
+}
+
+func TestVarsDirectiveBadNameIsError(t *testing.T) {
+	doc, err := jsonx.Parse([]byte(`{"$vars": {"has-dash": "x"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Merge([]Layer{{Name: "repo", Data: map[string]any{}}, {Name: "user", Data: doc}}); err == nil {
+		t.Fatal("expected an error for an invalid $vars name")
+	}
+}
