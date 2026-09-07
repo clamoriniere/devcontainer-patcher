@@ -66,8 +66,16 @@ func rewriteAt(doc map[string]any, key []string, fromDir, toDir string) {
 	}
 }
 
+// isAbs reports whether p is an absolute path. devcontainer.json paths are
+// POSIX-style regardless of host platform, so a leading slash counts as
+// absolute even on Windows, where filepath.IsAbs would reject it. The
+// filepath.IsAbs fallback still catches Windows drive-letter forms.
+func isAbs(p string) bool {
+	return strings.HasPrefix(p, "/") || strings.HasPrefix(p, `\`) || filepath.IsAbs(p)
+}
+
 func rebase(p, fromDir, toDir string) string {
-	if p == "" || filepath.IsAbs(p) || strings.Contains(p, "${") {
+	if p == "" || isAbs(p) || strings.Contains(p, "${") {
 		return p
 	}
 	rel, err := filepath.Rel(toDir, filepath.Join(fromDir, p))
