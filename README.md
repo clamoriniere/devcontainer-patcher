@@ -228,7 +228,9 @@ disk. Which path works depends on the editor, hence two modes.
 VS Code lists sub-folder configs in the "Reopen in Container" picker (supported
 since v1.75). Nothing tracked is modified. Relative `dockerfile`/`context`/
 `dockerComposeFile` paths are re-anchored for the deeper directory, and the
-profile name is appended to `name` so the picker entry is distinguishable.
+profile name is appended to `name` — the base config's `name`, or the
+repository folder name when it has none — so the picker entry is
+distinguishable.
 
 See **[docs/vscode.md](docs/vscode.md)** for the full VS Code walkthrough,
 including how to keep the generated config fresh automatically.

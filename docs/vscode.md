@@ -58,7 +58,9 @@ repository's own ignore rules are never modified and `git status` stays clean.
 
 `dcp install` appends the profile name to the config's `name` for exactly this
 reason — without it the picker would show two entries with identical labels.
-If your overlay sets its own `"name"`, that is used verbatim instead.
+The label it appends to is the base config's `"name"`, or the repository folder
+name when the base config has none. If your overlay sets its own `"name"`, that
+is used verbatim instead.
 
 ### What you get
 

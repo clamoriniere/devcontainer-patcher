@@ -152,7 +152,7 @@ func (i *Installer) installProfile(res *merge.Result, name string) (*State, erro
 	// build.dockerfile and friends must be re-anchored.
 	doc := jsonx.Clone(res.Config).(map[string]any)
 	dcpath.Rewrite(doc, devcontainerDir, targetDir)
-	labelProfile(doc, res, name)
+	labelProfile(doc, res, name, repoName(i.Workspace))
 
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return nil, err
@@ -327,17 +327,37 @@ func (i *Installer) PristineBase(state *State) string {
 // configuration picker. Without this it inherits the repo's "name" and shows up
 // as a second entry with an identical label. An overlay that sets "name"
 // itself is left alone.
-func labelProfile(doc map[string]any, res *merge.Result, profile string) {
+//
+// The label is the base config's "name" when it has one, otherwise repo (the
+// repository name), with the profile appended as " (profile)". Only when
+// neither is available does the bare profile stand on its own.
+func labelProfile(doc map[string]any, res *merge.Result, profile, repo string) {
 	prov := res.Provenance["name"]
 	userNamed := len(prov) > 0 && prov[len(prov)-1] != "repo"
 	if userNamed {
 		return
 	}
-	if current, ok := doc["name"].(string); ok && current != "" {
-		doc["name"] = fmt.Sprintf("%s (%s)", current, profile)
+
+	label, _ := doc["name"].(string)
+	if label == "" {
+		label = repo
+	}
+	if label == "" {
+		doc["name"] = profile
 		return
 	}
-	doc["name"] = profile
+	doc["name"] = fmt.Sprintf("%s (%s)", label, profile)
+}
+
+// repoName is the fallback label when neither the base config nor an overlay
+// names the project: the workspace folder's basename, matching the spec's
+// ${localWorkspaceFolderBasename}.
+func repoName(workspace string) string {
+	b := filepath.Base(workspace)
+	if b == "." || b == string(filepath.Separator) || b == "/" {
+		return ""
+	}
+	return b
 }
 
 func writeConfig(path string, doc map[string]any) error {
