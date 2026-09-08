@@ -165,6 +165,11 @@ Resolution is a single pass: a value that itself resolves to another
 `${dcp:...}` is left as written. Like `$strategy`, the `$vars` key is stripped
 before the config is written.
 
+After the placeholders resolve, `dcp` re-checks `mounts` for entries that now
+share a `target` and keeps the last one, with a warning — so parametrising a
+repo's mount target with `${dcp:remoteUser}` **replaces** that mount instead of
+adding a second bind at the same path.
+
 ### A note on lifecycle commands
 
 A single `devcontainer.json` field has only one representation for "run more

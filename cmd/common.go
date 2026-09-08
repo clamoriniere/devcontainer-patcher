@@ -118,6 +118,10 @@ func resolve() (*resolution, error) {
 // merged config (the spec has no variable for either); $vars directives from
 // any overlay layer add to and override them. Workspace-folder interpolation
 // is left to the spec's own ${localWorkspaceFolder} / ...Basename.
+//
+// Because placeholders resolve after the merge, two mounts that were textually
+// distinct at merge time can now share a target; the list is re-settled so the
+// last such entry wins, matching the merge's own mount rule.
 func expandPlaceholders(result *merge.Result) error {
 	vars := subst.Vars{}
 	if s, ok := result.Config["remoteUser"].(string); ok {
@@ -129,7 +133,15 @@ func expandPlaceholders(result *merge.Result) error {
 	for k, v := range result.Vars {
 		vars[strings.ToLower(k)] = v
 	}
-	return subst.Expand(result.Config, vars)
+	if err := subst.Expand(result.Config, vars); err != nil {
+		return err
+	}
+	if ms, ok := result.Config["mounts"].([]any); ok {
+		collapsed, warns := merge.CollapseMountsByTarget(ms)
+		result.Config["mounts"] = collapsed
+		result.Warnings = append(result.Warnings, warns...)
+	}
+	return nil
 }
 
 // printWarnings surfaces merge warnings on stderr so stdout stays pipeable.

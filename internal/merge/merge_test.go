@@ -1,6 +1,7 @@
 package merge
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/clamoriniere/devcontainer-patcher/internal/jsonx"
@@ -310,5 +311,96 @@ func TestVarsDirectiveBadNameIsError(t *testing.T) {
 	}
 	if _, err := Merge([]Layer{{Name: "repo", Data: map[string]any{}}, {Name: "user", Data: doc}}); err == nil {
 		t.Fatal("expected an error for an invalid $vars name")
+	}
+}
+
+func mountsArray(t *testing.T, doc string) []any {
+	t.Helper()
+	v, err := jsonx.Parse([]byte(doc))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	ms, ok := v["mounts"].([]any)
+	if !ok {
+		t.Fatalf("no mounts array in %s", doc)
+	}
+	return ms
+}
+
+func TestCollapseMountsByTarget(t *testing.T) {
+	got, warns := CollapseMountsByTarget(mountsArray(t, `{"mounts": [
+		"source=a,target=/home/vscode/.claude,type=bind",
+		"source=b,target=/other,type=bind",
+		"source=c,target=/home/vscode/.claude,type=bind,consistency=cached"
+	]}`))
+
+	// First position kept, last value wins.
+	exp := mountsArray(t, `{"mounts": [
+		"source=c,target=/home/vscode/.claude,type=bind,consistency=cached",
+		"source=b,target=/other,type=bind"
+	]}`)
+	if diff := cmp.Diff(exp, got); diff != "" {
+		t.Errorf("(-want +got):\n%s", diff)
+	}
+	if len(warns) != 1 || !strings.Contains(warns[0], `"/home/vscode/.claude"`) {
+		t.Errorf("warnings = %v, want one mentioning the target", warns)
+	}
+}
+
+func TestCollapseMountsMixedForms(t *testing.T) {
+	got, warns := CollapseMountsByTarget(mountsArray(t, `{"mounts": [
+		"source=a,target=/x,type=bind",
+		{"source": "b", "target": "/x", "type": "bind"}
+	]}`))
+
+	exp := mountsArray(t, `{"mounts": [{"source": "b", "target": "/x", "type": "bind"}]}`)
+	if diff := cmp.Diff(exp, got); diff != "" {
+		t.Errorf("(-want +got):\n%s", diff)
+	}
+	if len(warns) != 1 {
+		t.Errorf("want 1 warning, got %v", warns)
+	}
+}
+
+func TestCollapseMountsNoTargetLeftAlone(t *testing.T) {
+	in := mountsArray(t, `{"mounts": [
+		"source=a,type=bind",
+		"source=b,type=bind"
+	]}`)
+	got, warns := CollapseMountsByTarget(in)
+	if diff := cmp.Diff(in, got); diff != "" {
+		t.Errorf("(-want +got):\n%s", diff)
+	}
+	if len(warns) != 0 {
+		t.Errorf("want no warnings, got %v", warns)
+	}
+}
+
+func TestCollapseMountsNoCollision(t *testing.T) {
+	in := mountsArray(t, `{"mounts": [
+		"source=a,target=/x,type=bind",
+		"source=b,target=/y,type=bind"
+	]}`)
+	got, warns := CollapseMountsByTarget(in)
+	if diff := cmp.Diff(in, got); diff != "" {
+		t.Errorf("(-want +got):\n%s", diff)
+	}
+	if len(warns) != 0 {
+		t.Errorf("want no warnings, got %v", warns)
+	}
+}
+
+func TestCollapseMountsThreeOnOneTarget(t *testing.T) {
+	got, warns := CollapseMountsByTarget(mountsArray(t, `{"mounts": [
+		"source=a,target=/x,type=bind",
+		"source=b,target=/x,type=bind",
+		"source=c,target=/x,type=bind"
+	]}`))
+	exp := mountsArray(t, `{"mounts": ["source=c,target=/x,type=bind"]}`)
+	if diff := cmp.Diff(exp, got); diff != "" {
+		t.Errorf("(-want +got):\n%s", diff)
+	}
+	if len(warns) != 1 {
+		t.Errorf("want a single warning, got %v", warns)
 	}
 }

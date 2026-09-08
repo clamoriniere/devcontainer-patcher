@@ -399,6 +399,39 @@ func mountTarget(v any) string {
 	return ""
 }
 
+// CollapseMountsByTarget removes entries that share a container-side target,
+// keeping each target's last value at the position of its first occurrence.
+// The merge keys mounts by target during the fold, but ${dcp:...} placeholders
+// resolve afterwards, so entries that were textually distinct then can land on
+// the same target now. It returns one warning per collapsed target.
+func CollapseMountsByTarget(mounts []any) ([]any, []string) {
+	out := make([]any, 0, len(mounts))
+	idxByTarget := map[string]int{}
+	warned := map[string]bool{}
+	var warnings []string
+
+	for _, mount := range mounts {
+		target := mountTarget(mount)
+		if target == "" {
+			out = append(out, mount)
+			continue
+		}
+		if i, seen := idxByTarget[target]; seen {
+			out[i] = mount
+			if !warned[target] {
+				warnings = append(warnings, fmt.Sprintf(
+					"mounts: more than one entry resolves to target %q after ${dcp:...} expansion; keeping the last",
+					target))
+				warned[target] = true
+			}
+			continue
+		}
+		idxByTarget[target] = len(out)
+		out = append(out, mount)
+	}
+	return out, warnings
+}
+
 // mergeCommands folds lifecycle commands into the object form, which is the
 // only representation a single devcontainer.json field has for "run both".
 //
