@@ -35,6 +35,10 @@ go.work.sum
 /dcp
 /devcontainer-patcher
 
+# dcp local overlay layers (never committed)
+/.devcontainer/devcontainer.local.json
+/.devcontainer/.claude/
+
 # Build output
 /bin/
 /dist/
