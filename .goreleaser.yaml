@@ -109,10 +109,6 @@ brews:
     homepage: "https://github.com/clamoriniere/devcontainer-patcher"
     description: "Layer personal dev container overrides on top of a repo's devcontainer.json"
     license: "MIT"
-    # devcontainer-patcher is a private repo, so anonymous curl on the release
-    # asset URL 404s. This strategy makes `brew install` fetch it through the
-    # GitHub API using HOMEBREW_GITHUB_API_TOKEN (see brew-auth in dotfiles).
-    download_strategy: GitHubPrivateRepositoryReleaseDownloadStrategy
     install: |
       bin.install "dcp"
     test: |
