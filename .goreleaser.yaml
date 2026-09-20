@@ -89,14 +89,30 @@ release:
   prerelease: auto
   name_template: "v{{ .Version }}"
 
-# Homebrew tap — enable once the tap repo exists.
-# brews:
-#   - name: dcp
-#     repository:
-#       owner: clamoriniere
-#       name: homebrew-tap
-#     homepage: "https://github.com/clamoriniere/devcontainer-patcher"
-#     description: "Layer personal dev container overrides on top of a repo's devcontainer.json"
-#     license: "MIT"
-#     install: |
-#       bin.install "dcp"
+# Homebrew tap. `brews` is deprecated in GoReleaser (still works in v2.18); the
+# release workflow runs with `--skip=validate` so the deprecation notice doesn't
+# fail the run. Pushes over SSH with a write deploy key scoped to homebrew-tap
+# (secret HOMEBREW_TAP_DEPLOY_KEY on this repo) — no account-wide PAT.
+brews:
+  - name: dcp
+    ids:
+      - dcp
+    repository:
+      owner: clamoriniere
+      name: homebrew-tap
+      branch: main
+      git:
+        url: "ssh://git@github.com/clamoriniere/homebrew-tap.git"
+        private_key: "{{ .Env.HOMEBREW_TAP_DEPLOY_KEY }}"
+        ssh_command: "ssh -i {{ .KeyPath }} -o StrictHostKeyChecking=accept-new -F /dev/null"
+    directory: Formula
+    homepage: "https://github.com/clamoriniere/devcontainer-patcher"
+    description: "Layer personal dev container overrides on top of a repo's devcontainer.json"
+    license: "MIT"
+    install: |
+      bin.install "dcp"
+    test: |
+      system "#{bin}/dcp", "version"
+    caveats: |
+      dcp wraps the `devcontainer` CLI for `up`/`build`/`exec` — install it too:
+        npm install -g @devcontainers/cli
